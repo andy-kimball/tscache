@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 
 	"github.com/andy-kimball/arenaskl"
-	"github.com/cardbot/acid/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // RangeOptions are passed to AddRange to indicate the bounds of the range. By
@@ -208,7 +208,7 @@ func (c *Cache) LookupTimestamp(key []byte) hlc.Timestamp {
 		maxTs := hlc.Timestamp{WallTime: atomic.LoadInt64(&c.earlier.maxWallTime)}
 		if ts.Less(maxTs) {
 			ts2 := c.earlier.lookupTimestamp(key)
-			if ts2.Greater(ts) {
+			if ts.Less(ts2) {
 				ts = ts2
 			}
 		}
@@ -228,9 +228,9 @@ func (c *Cache) addRange(from, to []byte, opt rangeOptions, ts hlc.Timestamp) *f
 	c.rotMutex.RLock()
 	defer c.rotMutex.RUnlock()
 
-	// If requested timestamp is <= than floor timestamp, then no need to perform
-	// a search or add any records.
-	if !ts.Greater(c.floorTs) {
+	// If floor ts is >= requested timestamp, then no need to perform a search
+	// or add any records.
+	if !c.floorTs.Less(ts) {
 		return nil
 	}
 
@@ -305,7 +305,7 @@ func (c *Cache) rotateCaches(filledCache *fixedCache) {
 	// Max timestamp of the earlier cache becomes the new floor timestamp.
 	if c.earlier != nil {
 		newFloorTs := hlc.Timestamp{WallTime: atomic.LoadInt64(&c.earlier.maxWallTime)}
-		if newFloorTs.Greater(c.floorTs) {
+		if c.floorTs.Less(newFloorTs) {
 			c.floorTs = newFloorTs
 		}
 	}
@@ -351,11 +351,11 @@ func (c *fixedCache) addNode(it *arenaskl.Iterator, key []byte, ts hlc.Timestamp
 	}
 
 	if !it.SeekForPrev(key) {
-		// If the previous node has a gap timestamp that is greater than the
-		// new timestamp, then there is no need to add another node, since its
+		// If the previous node has a gap timestamp that is >= than the new
+		// timestamp, then there is no need to add another node, since its
 		// timestamp would be the same as the gap timestamp.
 		prevTs := c.scanForTimestamp(it, key, false)
-		if !ts.Greater(prevTs) {
+		if !prevTs.Less(ts) {
 			return nil
 		}
 
@@ -459,13 +459,13 @@ func (c *fixedCache) ratchetTimestampSet(it *arenaskl.Iterator, keyTs, gapTs hlc
 		oldKeyTs, oldGapTs := c.decodeTimestampSet(it.Value(), meta)
 
 		greater := false
-		if keyTs.Greater(oldKeyTs) {
+		if oldKeyTs.Less(keyTs) {
 			greater = true
 		} else {
 			keyTs = oldKeyTs
 		}
 
-		if gapTs.Greater(oldGapTs) {
+		if oldGapTs.Less(gapTs) {
 			greater = true
 		} else {
 			gapTs = oldGapTs
@@ -491,7 +491,7 @@ func (c *fixedCache) ratchetTimestampSet(it *arenaskl.Iterator, keyTs, gapTs hlc
 			err = it.SetMeta(meta & ^uint16(initializing))
 		} else {
 			// Ratchet the max timestamp.
-			if keyTs.Greater(gapTs) {
+			if gapTs.Less(keyTs) {
 				c.ratchetMaxTimestamp(keyTs)
 			} else {
 				c.ratchetMaxTimestamp(gapTs)
@@ -580,7 +580,6 @@ func (c *fixedCache) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey b
 		if !clone.Valid() {
 			// No more previous nodes, so use the zero timestamp and begin
 			// forward iteration from the first node.
-			gapTs = hlc.ZeroTimestamp
 			clone.SeekToFirst()
 			break
 		}
@@ -645,12 +644,12 @@ func (c *fixedCache) decodeTimestampSet(b []byte, meta uint16) (keyTs, gapTs hlc
 }
 
 func (c *fixedCache) encodeTimestampSet(b []byte, keyTs, gapTs hlc.Timestamp) (ret []byte, meta uint16) {
-	if !keyTs.Equal(hlc.ZeroTimestamp) {
+	if keyTs.WallTime != 0 || keyTs.Logical != 0 {
 		b = encodeTimestamp(b, keyTs)
 		meta |= hasKey
 	}
 
-	if !gapTs.Equal(hlc.ZeroTimestamp) {
+	if gapTs.WallTime != 0 || gapTs.Logical != 0 {
 		b = encodeTimestamp(b, gapTs)
 		meta |= hasGap
 	}

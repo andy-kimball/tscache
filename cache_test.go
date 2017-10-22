@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cardbot/acid/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,15 +37,15 @@ func TestReadstampAdd(t *testing.T) {
 
 	c := New(arenaSize)
 	c.Add([]byte("apricot"), ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("apple")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("apple")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("apricot")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("banana")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("banana")))
 
 	c.Add([]byte("banana"), ts2)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("apple")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("apple")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("apricot")))
 	require.Equal(t, ts2, c.LookupTimestamp([]byte("banana")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("cherry")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("cherry")))
 }
 
 func TestReadstampSingleRange(t *testing.T) {
@@ -55,51 +55,51 @@ func TestReadstampSingleRange(t *testing.T) {
 	c := New(arenaSize)
 
 	c.AddRange([]byte("apricot"), []byte("orange"), 0, ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("apple")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("apple")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("apricot")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("banana")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("orange")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("raspberry")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("raspberry")))
 
 	// Try again and make sure it's a no-op.
 	c.AddRange([]byte("apricot"), []byte("orange"), 0, ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("apple")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("apple")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("apricot")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("banana")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("orange")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("raspberry")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("raspberry")))
 
 	// Ratchet up the timestamps.
 	c.AddRange([]byte("apricot"), []byte("orange"), 0, ts2)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("apple")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("apple")))
 	require.Equal(t, ts2, c.LookupTimestamp([]byte("apricot")))
 	require.Equal(t, ts2, c.LookupTimestamp([]byte("banana")))
 	require.Equal(t, ts2, c.LookupTimestamp([]byte("orange")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("raspberry")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("raspberry")))
 
 	// Add disjoint range.
 	c.AddRange([]byte("pear"), []byte("tomato"), ExcludeFrom|ExcludeTo, ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("peach")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("pear")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("peach")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("pear")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("raspberry")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("tomato")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("watermelon")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("tomato")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("watermelon")))
 
 	// Try again and make sure it's a no-op.
 	c.AddRange([]byte("pear"), []byte("tomato"), ExcludeFrom|ExcludeTo, ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("peach")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("pear")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("peach")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("pear")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("raspberry")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("tomato")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("watermelon")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("tomato")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("watermelon")))
 
 	// Ratchet up the timestamps.
 	c.AddRange([]byte("pear"), []byte("tomato"), ExcludeFrom|ExcludeTo, ts2)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("peach")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("pear")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("peach")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("pear")))
 	require.Equal(t, ts2, c.LookupTimestamp([]byte("raspberry")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("tomato")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("watermelon")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("tomato")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("watermelon")))
 }
 
 func TestReadstampOpenRanges(t *testing.T) {
@@ -227,29 +227,29 @@ func TestReadstampBoundaryRange(t *testing.T) {
 
 	// If from key is greater than to key, then range is zero-length.
 	c.AddRange([]byte("kiwi"), []byte("apple"), 0, ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("apple")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("banana")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("kiwi")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("raspberry")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("apple")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("banana")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("kiwi")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("raspberry")))
 
 	// If from key is same as to key, and both are excluded, then range is
 	// zero-length.
 	c.AddRange([]byte("banana"), []byte("banana"), ExcludeFrom|ExcludeTo, ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("apple")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("banana")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("kiwi")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("apple")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("banana")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("kiwi")))
 
 	// If from key is same as to key, then range has length one.
 	c.AddRange([]byte("mango"), []byte("mango"), 0, ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("kiwi")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("kiwi")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("mango")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("orange")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("orange")))
 
 	// If from key is same as to key, then range has length one.
 	c.AddRange([]byte("banana"), []byte("banana"), ExcludeTo, ts)
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("apple")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("apple")))
 	require.Equal(t, ts, c.LookupTimestamp([]byte("banana")))
-	require.Equal(t, hlc.ZeroTimestamp, c.LookupTimestamp([]byte("cherry")))
+	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("cherry")))
 }
 
 func TestReadstampFillCache(t *testing.T) {
@@ -266,7 +266,7 @@ func TestReadstampFillCache(t *testing.T) {
 	}
 
 	floorTs := c.floorTs
-	require.True(t, floorTs.Greater(hlc.Timestamp{WallTime: 100}))
+	require.True(t, hlc.Timestamp{WallTime: 100}.Less(floorTs))
 
 	lastKey := []byte(fmt.Sprintf("%05d", n-1))
 	require.Equal(t, hlc.Timestamp{WallTime: int64(100 + n - 1), Logical: int32(n - 1)}, c.LookupTimestamp(lastKey))
@@ -365,7 +365,7 @@ func testConcurrency(t *testing.T, cacheSize uint32) {
 
 			rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 			key := []byte(fmt.Sprintf("%05d", i))
-			maxTs := hlc.ZeroTimestamp
+			maxTs := hlc.Timestamp{}
 
 			for j := 0; j < n; j++ {
 				fromNum := rng.Intn(slots)
