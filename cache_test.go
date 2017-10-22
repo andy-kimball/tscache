@@ -31,7 +31,7 @@ const (
 	arenaSize = 64 * 1024 * 1024
 )
 
-func TestReadstampAdd(t *testing.T) {
+func TestCacheAdd(t *testing.T) {
 	ts := hlc.Timestamp{100, 100}
 	ts2 := hlc.Timestamp{200, 201}
 
@@ -48,7 +48,7 @@ func TestReadstampAdd(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("cherry")))
 }
 
-func TestReadstampSingleRange(t *testing.T) {
+func TestCacheSingleRange(t *testing.T) {
 	ts := hlc.Timestamp{100, 100}
 	ts2 := hlc.Timestamp{200, 50}
 
@@ -102,7 +102,7 @@ func TestReadstampSingleRange(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("watermelon")))
 }
 
-func TestReadstampOpenRanges(t *testing.T) {
+func TestCacheOpenRanges(t *testing.T) {
 	floorTs := hlc.Timestamp{100, 0}
 	ts := hlc.Timestamp{200, 200}
 	ts2 := hlc.Timestamp{200, 201}
@@ -123,7 +123,7 @@ func TestReadstampOpenRanges(t *testing.T) {
 	require.Equal(t, ts, c.LookupTimestamp([]byte("orange")))
 }
 
-func TestReadstampSupersetRange(t *testing.T) {
+func TestCacheSupersetRange(t *testing.T) {
 	floorTs := hlc.Timestamp{100, 0}
 	ts := hlc.Timestamp{200, 1}
 	ts2 := hlc.Timestamp{201, 0}
@@ -162,7 +162,7 @@ func TestReadstampSupersetRange(t *testing.T) {
 	require.Equal(t, floorTs, c.LookupTimestamp([]byte("watermelon")))
 }
 
-func TestReadstampContiguousRanges(t *testing.T) {
+func TestCacheContiguousRanges(t *testing.T) {
 	floorTs := hlc.Timestamp{WallTime: 100, Logical: 0}
 	ts := hlc.Timestamp{200, 1}
 	ts2 := hlc.Timestamp{201, 0}
@@ -178,7 +178,7 @@ func TestReadstampContiguousRanges(t *testing.T) {
 	require.Equal(t, floorTs, c.LookupTimestamp([]byte("orange")))
 }
 
-func TestReadstampOverlappingRanges(t *testing.T) {
+func TestCacheOverlappingRanges(t *testing.T) {
 	floorTs := hlc.Timestamp{WallTime: 100, Logical: 0}
 	ts := hlc.Timestamp{200, 1}
 	ts2 := hlc.Timestamp{201, 0}
@@ -217,7 +217,7 @@ func TestReadstampOverlappingRanges(t *testing.T) {
 	require.Equal(t, ts4, c.LookupTimestamp([]byte("raspberry")))
 }
 
-func TestReadstampBoundaryRange(t *testing.T) {
+func TestCacheBoundaryRange(t *testing.T) {
 	ts := hlc.Timestamp{100, 100}
 
 	c := New(arenaSize)
@@ -252,7 +252,7 @@ func TestReadstampBoundaryRange(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{}, c.LookupTimestamp([]byte("cherry")))
 }
 
-func TestReadstampFillCache(t *testing.T) {
+func TestCacheFillCache(t *testing.T) {
 	const n = 200
 
 	// Use constant seed so that skiplist towers will be of predictable size.
@@ -278,7 +278,7 @@ func TestReadstampFillCache(t *testing.T) {
 }
 
 // Repeatedly fill cache and make sure timestamp lookups always increase.
-func TestReadstampFillCache2(t *testing.T) {
+func TestCacheFillCache2(t *testing.T) {
 	const n = 10000
 
 	c := New(997)
@@ -293,18 +293,17 @@ func TestReadstampFillCache2(t *testing.T) {
 
 // Test concurrency with a small cache size in order to force lots of cache
 // rotations.
-func TestReadstampConcurrencyRotates(t *testing.T) {
+func TestCacheConcurrencyRotates(t *testing.T) {
 	testConcurrency(t, 2048)
 }
 
 // Test concurrency with a larger cache size in order to test slot concurrency
 // without the added complication of cache rotations.
-func TestReadstampConcurrencySlots(t *testing.T) {
+func TestCacheConcurrencySlots(t *testing.T) {
 	testConcurrency(t, arenaSize)
 }
 
-func BenchmarkReadstamp(b *testing.B) {
-	const max = 1000000000
+func BenchmarkCache(b *testing.B) {
 	const parallel = 1
 	const data = 500000
 
@@ -313,7 +312,7 @@ func BenchmarkReadstamp(b *testing.B) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for i := 0; i < data; i++ {
-		from, to := makeRange(rng.Int31n(max))
+		from, to := makeRange(rng.Int31())
 		cache.AddRange(from, to, ExcludeFrom|ExcludeTo, clock.Now())
 	}
 
@@ -331,7 +330,7 @@ func BenchmarkReadstamp(b *testing.B) {
 
 					for n := 0; n < b.N/parallel; n++ {
 						readFrac := rng.Int31()
-						keyNum := rng.Int31n(max)
+						keyNum := rng.Int31()
 
 						if (readFrac % 10) < int32(i) {
 							key := []byte(fmt.Sprintf("%020d", keyNum))
