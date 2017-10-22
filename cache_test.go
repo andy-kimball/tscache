@@ -303,16 +303,39 @@ func TestCacheConcurrencySlots(t *testing.T) {
 	testConcurrency(t, arenaSize)
 }
 
+func BenchmarkAdd(b *testing.B) {
+	const max = 500000000
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
+	cache := New(64 * 1024 * 1024)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	size := 1
+	for i := 0; i < 9; i++ {
+		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
+			for iter := 0; iter < b.N; iter++ {
+				rnd := int64(rng.Int31n(max))
+				from := []byte(fmt.Sprintf("%020d", rnd))
+				to := []byte(fmt.Sprintf("%020d", rnd+int64(size-1)))
+				cache.AddRange(from, to, 0, clock.Now())
+			}
+		})
+
+		size *= 10
+	}
+}
+
 func BenchmarkCache(b *testing.B) {
 	const parallel = 1
+	const max = 1000000000
 	const data = 500000
 
 	cache := New(arenaSize)
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for i := 0; i < data; i++ {
-		from, to := makeRange(rng.Int31())
+		from, to := makeRange(rng.Int31n(max))
 		cache.AddRange(from, to, ExcludeFrom|ExcludeTo, clock.Now())
 	}
 
@@ -330,7 +353,7 @@ func BenchmarkCache(b *testing.B) {
 
 					for n := 0; n < b.N/parallel; n++ {
 						readFrac := rng.Int31()
-						keyNum := rng.Int31()
+						keyNum := rng.Int31n(max)
 
 						if (readFrac % 10) < int32(i) {
 							key := []byte(fmt.Sprintf("%020d", keyNum))
