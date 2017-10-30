@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/andy-kimball/arenaskl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
@@ -440,4 +441,15 @@ func makeRange(start int32) (from, to []byte) {
 	from = []byte(fmt.Sprintf("%020d", start))
 	to = []byte(fmt.Sprintf("%020d", end))
 	return
+}
+
+// Dump cache for debugging tests.
+func logFixedCache(c *fixedCache) {
+	var it arenaskl.Iterator
+	it.Init(c.list)
+
+	for it.SeekToFirst(); it.Valid(); it.Next() {
+		keyTs, gapTs := c.decodeTimestampSet(it.Value(), it.Meta())
+		fmt.Printf("key: %v, meta: %v, keyTs: %v, gapTs: %v\n", string(it.Key()), int32(it.Meta()), keyTs, gapTs)
+	}
 }

@@ -63,10 +63,10 @@ const (
 type nodeOptions int
 
 const (
-	// Initializing indicates that the node has been created, but is still in a
-	// provisional state. Any key and gap timestamps are not final values, and
-	// should not be used until initialization is complete.
-	initializing = 0x1
+	// Initialized indicates that the node has been created and fully
+	// initialized. Key and gap timestamps are final values, and can now be
+	// used.
+	initialized = 0x1
 
 	// HasKey indicates the node has an associated key timestamp. If this is not
 	// set, then the key timestamp is assumed to be zero.
@@ -328,7 +328,7 @@ func (c *fixedCache) lookupTimestamp(key []byte) hlc.Timestamp {
 		return c.scanForTimestamp(&it, key, false)
 	}
 
-	if (it.Meta() & initializing) != 0 {
+	if (it.Meta() & initialized) == 0 {
 		// Node is not yet initialized, so scan previous nodes to find the
 		// gap timestamp needed to initialize this node.
 		return c.scanForTimestamp(&it, key, true)
@@ -370,7 +370,7 @@ func (c *fixedCache) addNode(it *arenaskl.Iterator, key []byte, ts hlc.Timestamp
 		// forced to stop and help complete its initialization before they
 		// can continue.
 		b, meta := c.encodeTimestampSet(arr[:0], keyTs, gapTs)
-		err := it.Add(key, b, meta|initializing)
+		err := it.Add(key, b, meta)
 		if err == arenaskl.ErrArenaFull {
 			atomic.StoreInt32(&c.isFull, 1)
 			return err
@@ -392,10 +392,10 @@ func (c *fixedCache) addNode(it *arenaskl.Iterator, key []byte, ts hlc.Timestamp
 		}
 	}
 
-	// Ratchet up the timestamps on the existing node, but don't clear the
-	// initializing bit, since we don't have the gap timestamp from the previous
-	// node. Leave finishing initialization to the thread that added the node, or
-	// to a lookup thread that requires it.
+	// Ratchet up the timestamps on the existing node, but don't set the
+	// initialized bit, since we don't have the gap timestamp from the previous
+	// node. Leave finishing initialization to the thread that added the node,
+	// or to a lookup thread that requires it.
 	c.ratchetTimestampSet(it, keyTs, gapTs, false)
 
 	return nil
@@ -416,9 +416,9 @@ func (c *fixedCache) ensureFloorTs(it *arenaskl.Iterator, to []byte, ts hlc.Time
 			return false
 		}
 
-		// Don't clear the initialization bit, since we don't have the gap
-		// timestamp from the previous node, and don't need an initialized node
-		// for this operation anyway.
+		// Don't set the initialized bit, since we don't have the gap timestamp
+		// from the previous node, and don't need an initialized node for this
+		// operation anyway.
 		c.ratchetTimestampSet(it, ts, ts, false)
 
 		it.Next()
@@ -448,10 +448,10 @@ func (c *fixedCache) ratchetMaxTimestamp(ts hlc.Timestamp) {
 }
 
 // RatchetTimestampSet will update the current node's key and gap timestamps to
-// the maximum of their current values or the given values. If clearInit is true,
-// then the initializing bit will be cleared, indicating that the node is now
-// fully initialized and its timestamps can now be relied upon.
-func (c *fixedCache) ratchetTimestampSet(it *arenaskl.Iterator, keyTs, gapTs hlc.Timestamp, clearInit bool) {
+// the maximum of their current values or the given values. If setInit is true,
+// then the initialized bit will be set, indicating that the node is now fully
+// initialized and its timestamps can be relied upon.
+func (c *fixedCache) ratchetTimestampSet(it *arenaskl.Iterator, keyTs, gapTs hlc.Timestamp, setInit bool) {
 	var arr [encodedTsSize * 2]byte
 
 	for {
@@ -472,23 +472,26 @@ func (c *fixedCache) ratchetTimestampSet(it *arenaskl.Iterator, keyTs, gapTs hlc
 		}
 
 		var initMeta uint16
-		if clearInit {
-			initMeta = 0
+		if setInit {
+			// Always set the initialized bit.
+			initMeta = initialized
 		} else {
-			initMeta = meta & initializing
+			// Preserve the current value of the initialized bit.
+			initMeta = meta & initialized
 		}
 
 		// Check whether it's necessary to make an update.
 		var err error
 		if !greater {
-			if !clearInit || (meta&initializing) == 0 {
-				// No update necessary because the init bit doesn't need to be
-				// cleared or it's already cleared.
+			newMeta := meta | initMeta
+
+			if newMeta == meta {
+				// New meta value is same as old, so no update necessary.
 				return
 			}
 
-			// Clear the initializing bit, but no need to update the timestamps.
-			err = it.SetMeta(meta & ^uint16(initializing))
+			// Set the initialized bit, but no need to update the timestamps.
+			err = it.SetMeta(newMeta)
 		} else {
 			// Ratchet the max timestamp.
 			if gapTs.Less(keyTs) {
@@ -585,7 +588,7 @@ func (c *fixedCache) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey b
 		}
 
 		meta := clone.Meta()
-		if (meta & initializing) == 0 {
+		if (meta & initialized) != 0 {
 			// Found the gap timestamp for an initialized node.
 			_, gapTs = c.decodeTimestampSet(clone.Value(), meta)
 			clone.Next()
@@ -602,7 +605,7 @@ func (c *fixedCache) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey b
 			return gapTs
 		}
 
-		if (clone.Meta() & initializing) != 0 {
+		if (clone.Meta() & initialized) == 0 {
 			// Finish initializing the node with the gap timestamp.
 			c.ratchetTimestampSet(&clone, gapTs, gapTs, true)
 		}
